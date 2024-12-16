@@ -1,0 +1,110 @@
+# Pumpkin Classifier
+# Description: This script trains a Random Forest Classifier to predict pumpkin types 
+# based on the data from Gotem_Pumpkins.csv and applies it to classify pumpkins found by Freyja.
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# Load the datasets
+# Replace file paths with local paths if running locally.
+gotem_data = pd.read_csv('Gotem_Pumpkins.csv')  # Training dataset
+freyja_data = pd.read_csv('Freyja_Pumpkins.csv')  # Testing dataset
+
+# Preview datasets
+print("Gotem Data Preview:")
+print(gotem_data.head())
+print("\nFreyja Data Preview:")
+print(freyja_data.head())
+
+# Data Preprocessing Function
+def preprocess_data(data, is_training=True, label_column=None):
+    """
+    Preprocesses the input data:
+    - Handles missing values by dropping rows with NaNs.
+    - Separates features and labels for training data.
+    - One-hot encodes categorical features.
+    - Encodes labels for classification tasks (if training data).
+
+    Parameters:
+        data (DataFrame): The input data.
+        is_training (bool): Flag to indicate training data.
+        label_column (str): Name of the label column (only for training data).
+
+    Returns:
+        - features (DataFrame): Preprocessed feature set.
+        - labels (ndarray or None): Encoded labels if training, else None.
+        - label_encoder (LabelEncoder or None): Encoder for labels, if applicable.
+    """
+    data = data.copy()
+
+    # Drop rows with missing values
+    data = data.dropna()
+
+    # Separate features and labels for training data
+    if is_training and label_column:
+        labels = data[label_column]
+        features = data.drop(label_column, axis=1)
+    else:
+        labels = None
+        features = data
+
+    # One-hot encode categorical features
+    features = pd.get_dummies(features, drop_first=True)
+
+    # Encode labels if applicable
+    if labels is not None:
+        label_encoder = LabelEncoder()
+        labels = label_encoder.fit_transform(labels)
+        return features, labels, label_encoder
+
+    return features
+
+# Preprocess the Gotem data
+label_column = 'Class'  # Update this to match the label column in your Gotem dataset
+X, y, label_encoder = preprocess_data(gotem_data, is_training=True, label_column=label_column)
+
+# Preprocess the Freyja data
+X_freyja = preprocess_data(freyja_data, is_training=False)
+
+# Align Freyja's features with Gotem's features
+missing_columns = set(X.columns) - set(X_freyja.columns)
+for col in missing_columns:
+    X_freyja[col] = 0
+X_freyja = X_freyja[X.columns]  # Ensure identical column ordering
+
+# Split Gotem data into training and validation sets
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize the features
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+X_freyja = scaler.transform(X_freyja)
+
+# Train a Random Forest Classifier
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Evaluate the model on the validation set
+y_val_pred = model.predict(X_val)
+val_accuracy = accuracy_score(y_val, y_val_pred)
+print(f"Validation Accuracy: {val_accuracy}\n")
+print("Classification Report on Validation Set:")
+print(classification_report(y_val, y_val_pred, target_names=label_encoder.classes_))
+
+# Predict pumpkin types for Freyja's data
+y_freyja_pred = model.predict(X_freyja)
+y_freyja_pred_labels = label_encoder.inverse_transform(y_freyja_pred)
+
+# Save predictions
+freyja_data['PredictedPumpkinType'] = y_freyja_pred_labels
+print("\nPredictions for Freyja Pumpkins:")
+print(freyja_data[['PredictedPumpkinType']])
+
+# Save predictions to a CSV file
+freyja_data.to_csv('Freyja_Pumpkins_Predictions.csv', index=False)
+print("\nPredictions saved to 'Freyja_Pumpkins_Predictions.csv'")
