@@ -1,0 +1,113 @@
+import numpy as np
+import pandas as pd
+
+# Load the datasets
+train_data = pd.read_csv('Train - Train.csv')
+test_data = pd.read_csv('Test - Test.csv')
+
+# Display the first few rows of the datasets
+print("Train Data Preview:")
+print(train_data.head())
+print("\nTest Data Preview:")
+print(test_data.head())
+
+# Data preprocessing
+def preprocess_data(data):
+    data = data.copy()
+    
+    # Handle missing values
+    data = data.dropna()  # For simplicity, drop rows with missing values
+    
+    # Encode categorical features (if any)
+    data = pd.get_dummies(data, drop_first=True)
+    
+    return data
+
+# Preprocess the training and testing data
+train_data = preprocess_data(train_data)
+test_data = preprocess_data(test_data)
+
+# Ensure alignment of features between train and test data
+common_columns = list(set(train_data.columns) & set(test_data.columns))
+train_data = train_data[common_columns]
+test_data = test_data[common_columns]
+
+# Separate features (X) and target variable (y)
+X_train = train_data.drop('SalePrice', axis=1, errors='ignore').values
+y_train = train_data['SalePrice'].values
+
+X_test = test_data.drop('SalePrice', axis=1, errors='ignore').values
+y_test = test_data['SalePrice'].values
+
+# Normalize the features
+def normalize_features(X):
+    # Replace NaN or infinite values with 0
+    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # Compute mean and std with safeguards
+    mean = np.mean(X, axis=0)
+    std = np.std(X, axis=0)
+    std[std == 0] = 1  # Avoid division by zero for constant columns
+    
+    return (X - mean) / std
+
+X_train = normalize_features(X_train)
+X_test = normalize_features(X_test)
+X_train = np.array(X_train, dtype=np.float64)
+y_train = np.array(y_train, dtype=np.float64)
+X_test = np.array(X_test, dtype=np.float64)
+y_test = np.array(y_test, dtype=np.float64)
+
+# Initialize parameters
+n_features = X_train.shape[1]
+w = np.zeros(n_features)
+b = 0
+
+# Define the learning rate and number of iterations
+learning_rate = 0.01
+num_iterations = 1000
+
+# Define the cost function and gradient descent
+def compute_cost(X, y, w, b):
+    m = X.shape[0]
+    predictions = np.dot(X, w) + b
+    cost = (1 / (2 * m)) * np.sum((predictions - y) ** 2)
+    return cost
+
+def gradient_descent(X, y, w, b, learning_rate, num_iterations):
+    m = X.shape[0]
+    cost_history = []
+
+    for i in range(num_iterations):
+        predictions = np.dot(X, w) + b
+        
+        # Calculate gradients
+        dw = (1 / m) * np.dot(X.T, (predictions - y))
+        db = (1 / m) * np.sum(predictions - y)
+        
+        # Update parameters
+        w -= learning_rate * dw
+        b -= learning_rate * db
+        
+        # Calculate and store the cost
+        cost = compute_cost(X, y, w, b)
+        cost_history.append(cost)
+        
+        if i % 100 == 0:
+            print(f"Iteration {i}: Cost = {cost}")
+
+    return w, b, cost_history
+
+# Train the model
+w, b, cost_history = gradient_descent(X_train, y_train, w, b, learning_rate, num_iterations)
+
+# Evaluate the model
+def evaluate_model(X, y, w, b):
+    predictions = np.dot(X, w) + b
+    mse = np.mean((predictions - y) ** 2)
+    r2_score = 1 - (np.sum((predictions - y) ** 2) / np.sum((y - np.mean(y)) ** 2))
+    return mse, r2_score
+
+mse, r2_score = evaluate_model(X_test, y_test, w, b)
+print(f"\nMean Squared Error on Test Data: {mse}")
+print(f"R-squared Score on Test Data: {r2_score}")
